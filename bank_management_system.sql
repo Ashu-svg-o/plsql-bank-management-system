@@ -111,7 +111,7 @@ CREATE OR REPLACE TRIGGER trg_validate_transaction
 BEFORE INSERT ON transactions
 FOR EACH ROW
 BEGIN
-    IF :NEW.amount <= 0 THEN
+    IF :NEW.amount IS NULL OR :NEW.amount <= 0 THEN
         RAISE_APPLICATION_ERROR(-20010, 'Transaction amount must be greater than zero');
     END IF;
 END;
@@ -180,9 +180,16 @@ CREATE OR REPLACE PACKAGE BODY bank_pkg AS
         END IF;
     END validate_amount;
 
-    PROCEDURE validate_active_account(p_account_id NUMBER) IS
+    PROCEDURE deposit_money(
+        p_account_id NUMBER,
+        p_amount NUMBER,
+        p_description VARCHAR2 DEFAULT 'Cash deposit'
+    ) IS
         v_status accounts.status%TYPE;
     BEGIN
+        SAVEPOINT deposit_operation;
+        validate_amount(p_amount);
+
         SELECT status INTO v_status
         FROM accounts
         WHERE account_id = p_account_id
@@ -191,19 +198,6 @@ CREATE OR REPLACE PACKAGE BODY bank_pkg AS
         IF v_status <> 'ACTIVE' THEN
             RAISE_APPLICATION_ERROR(-20003, 'Account is not active: ' || p_account_id);
         END IF;
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            RAISE_APPLICATION_ERROR(-20001, 'Account does not exist: ' || p_account_id);
-    END validate_active_account;
-
-    PROCEDURE deposit_money(
-        p_account_id NUMBER,
-        p_amount NUMBER,
-        p_description VARCHAR2 DEFAULT 'Cash deposit'
-    ) IS
-    BEGIN
-        validate_amount(p_amount);
-        validate_active_account(p_account_id);
 
         UPDATE accounts
         SET balance = balance + p_amount
@@ -214,11 +208,13 @@ CREATE OR REPLACE PACKAGE BODY bank_pkg AS
         VALUES
             (seq_txn.NEXTVAL, p_account_id, 'DEPOSIT', p_amount, p_description);
 
-        COMMIT;
         DBMS_OUTPUT.PUT_LINE('Deposit successful. New balance: ' || get_balance(p_account_id));
     EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            ROLLBACK TO deposit_operation;
+            RAISE_APPLICATION_ERROR(-20001, 'Account does not exist: ' || p_account_id);
         WHEN OTHERS THEN
-            ROLLBACK;
+            ROLLBACK TO deposit_operation;
             RAISE;
     END deposit_money;
 
@@ -228,14 +224,19 @@ CREATE OR REPLACE PACKAGE BODY bank_pkg AS
         p_description VARCHAR2 DEFAULT 'Cash withdrawal'
     ) IS
         v_balance accounts.balance%TYPE;
+        v_status  accounts.status%TYPE;
     BEGIN
+        SAVEPOINT withdraw_operation;
         validate_amount(p_amount);
-        validate_active_account(p_account_id);
 
-        SELECT balance INTO v_balance
+        SELECT balance, status INTO v_balance, v_status
         FROM accounts
         WHERE account_id = p_account_id
         FOR UPDATE;
+
+        IF v_status <> 'ACTIVE' THEN
+            RAISE_APPLICATION_ERROR(-20003, 'Account is not active: ' || p_account_id);
+        END IF;
 
         IF v_balance < p_amount THEN
             RAISE_APPLICATION_ERROR(-20004,
@@ -251,11 +252,13 @@ CREATE OR REPLACE PACKAGE BODY bank_pkg AS
         VALUES
             (seq_txn.NEXTVAL, p_account_id, 'WITHDRAW', p_amount, p_description);
 
-        COMMIT;
         DBMS_OUTPUT.PUT_LINE('Withdrawal successful. New balance: ' || get_balance(p_account_id));
     EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            ROLLBACK TO withdraw_operation;
+            RAISE_APPLICATION_ERROR(-20001, 'Account does not exist: ' || p_account_id);
         WHEN OTHERS THEN
-            ROLLBACK;
+            ROLLBACK TO withdraw_operation;
             RAISE;
     END withdraw_money;
 
@@ -269,23 +272,34 @@ CREATE OR REPLACE PACKAGE BODY bank_pkg AS
         v_from_status  accounts.status%TYPE;
         v_to_status    accounts.status%TYPE;
     BEGIN
+        SAVEPOINT transfer_operation;
         validate_amount(p_amount);
 
         IF p_from_account = p_to_account THEN
             RAISE_APPLICATION_ERROR(-20005, 'Source and destination accounts must differ');
         END IF;
 
-        -- Lock accounts in deterministic order to reduce deadlock risk.
+        -- Lock both rows in deterministic account-id order to reduce deadlock risk.
         IF p_from_account < p_to_account THEN
             SELECT balance, status INTO v_from_balance, v_from_status
-            FROM accounts WHERE account_id = p_from_account FOR UPDATE;
+            FROM accounts
+            WHERE account_id = p_from_account
+            FOR UPDATE;
+
             SELECT status INTO v_to_status
-            FROM accounts WHERE account_id = p_to_account FOR UPDATE;
+            FROM accounts
+            WHERE account_id = p_to_account
+            FOR UPDATE;
         ELSE
             SELECT status INTO v_to_status
-            FROM accounts WHERE account_id = p_to_account FOR UPDATE;
+            FROM accounts
+            WHERE account_id = p_to_account
+            FOR UPDATE;
+
             SELECT balance, status INTO v_from_balance, v_from_status
-            FROM accounts WHERE account_id = p_from_account FOR UPDATE;
+            FROM accounts
+            WHERE account_id = p_from_account
+            FOR UPDATE;
         END IF;
 
         IF v_from_status <> 'ACTIVE' OR v_to_status <> 'ACTIVE' THEN
@@ -315,25 +329,31 @@ CREATE OR REPLACE PACKAGE BODY bank_pkg AS
         VALUES
             (seq_txn.NEXTVAL, p_to_account, 'TRANSFER_IN', p_amount, p_description);
 
-        COMMIT;
         DBMS_OUTPUT.PUT_LINE('Transfer successful: ' || p_amount ||
                              ' from ' || p_from_account || ' to ' || p_to_account);
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
-            ROLLBACK;
+            ROLLBACK TO transfer_operation;
             RAISE_APPLICATION_ERROR(-20001, 'One or more accounts do not exist');
         WHEN OTHERS THEN
-            ROLLBACK;
+            ROLLBACK TO transfer_operation;
             RAISE;
     END transfer_money;
 
     PROCEDURE close_account(p_account_id NUMBER) IS
         v_balance accounts.balance%TYPE;
+        v_status  accounts.status%TYPE;
     BEGIN
-        SELECT balance INTO v_balance
+        SAVEPOINT close_operation;
+
+        SELECT balance, status INTO v_balance, v_status
         FROM accounts
         WHERE account_id = p_account_id
         FOR UPDATE;
+
+        IF v_status <> 'ACTIVE' THEN
+            RAISE_APPLICATION_ERROR(-20008, 'Only an active account can be closed');
+        END IF;
 
         IF v_balance <> 0 THEN
             RAISE_APPLICATION_ERROR(-20007,
@@ -344,13 +364,13 @@ CREATE OR REPLACE PACKAGE BODY bank_pkg AS
         SET status = 'CLOSED'
         WHERE account_id = p_account_id;
 
-        COMMIT;
         DBMS_OUTPUT.PUT_LINE('Account closed: ' || p_account_id);
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
+            ROLLBACK TO close_operation;
             RAISE_APPLICATION_ERROR(-20001, 'Account does not exist: ' || p_account_id);
         WHEN OTHERS THEN
-            ROLLBACK;
+            ROLLBACK TO close_operation;
             RAISE;
     END close_account;
 
@@ -360,10 +380,14 @@ END bank_pkg;
 -- ============================================================
 -- DEMO
 -- ============================================================
+-- Package procedures do not COMMIT internally. Transaction control
+-- stays with the caller, so multiple operations can be committed as
+-- one unit of work.
 BEGIN
     bank_pkg.deposit_money(1001, 2500, 'Salary credit');
     bank_pkg.withdraw_money(1001, 1000, 'ATM withdrawal');
     bank_pkg.transfer_money(1001, 1002, 1500, 'Transfer to Palak');
+    COMMIT;
 END;
 /
 
@@ -411,7 +435,7 @@ SELECT
 FROM account_audit
 ORDER BY audit_id;
 
--- Expected failure: demonstrates exception handling.
+-- Expected failure: demonstrates exception handling and rollback.
 BEGIN
     bank_pkg.withdraw_money(1002, 999999, 'Insufficient funds test');
 EXCEPTION
