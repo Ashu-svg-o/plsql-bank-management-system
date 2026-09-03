@@ -70,9 +70,9 @@ Supporting procedures handle amount and account-status validation internally.
 
 The demo section of the SQL script performs:
 
-1. Deposit into Ashutosh Kushwaha's account.
+1. Deposit into **Ashutosh Kushwaha's** account.
 2. Withdrawal for an ATM transaction.
-3. Transfer from Ashutosh Kushwaha's account to Palak Sharma's account.
+3. Transfer from Ashutosh Kushwaha's account to **Palak Sharma's** account.
 4. Account, transaction-history, customer-balance and audit reports.
 5. An intentional insufficient-funds failure to demonstrate exception handling.
 
@@ -100,6 +100,23 @@ The demo section of the SQL script performs:
 
 > **Note:** The cleanup section intentionally drops objects belonging to this project so the script can be rerun in a dedicated development schema. Do not run it in a schema containing unrelated objects with the same names.
 
-## Project Highlights
+## Testing Scenarios
 
-This project demonstrates how database constraints, PL/SQL business logic, exception handling, transaction control, row locking, triggers and reporting queries can work together to implement a small but structured banking system.
+The script includes successful deposit, withdrawal and transfer flows plus an expected insufficient-funds failure. Manual tests should also cover invalid amounts, inactive accounts, self-transfers, missing accounts and closing an account with a non-zero balance.
+
+## Project Structure
+
+```text
+plsql-bank-management-system/
+├── bank_management_system.sql
+└── README.md
+```
+
+## Resume Description
+
+**Bank Management System | Oracle SQL & PL/SQL**  
+Designed a relational banking database with customer, account and transaction management; implemented packaged PL/SQL business logic for deposits, withdrawals and atomic transfers with validation, exception handling, row-level locking and rollback; added triggers, audit logging, integrity constraints and reporting queries.
+
+## Disclaimer
+
+This is an educational portfolio project intended to demonstrate Oracle SQL/PLSQL database design and programming concepts. It is not production banking software.
