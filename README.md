@@ -17,6 +17,8 @@ A small banking database project built with **Oracle SQL and PL/SQL**. It covers
 
 ## Database Design
 
+The database relationships are documented in [docs/ER-DIAGRAM.md](docs/ER-DIAGRAM.md).
+
 ```text
 CUSTOMERS
    │ 1
@@ -115,6 +117,8 @@ Run the main script first and then run `tests.sql`.
 plsql-bank-management-system/
 ├── bank_management_system.sql   # Schema, package, demo and reports
 ├── tests.sql                     # Basic automated checks
+├── docs/
+│   └── ER-DIAGRAM.md             # Database relationships
 └── README.md                     # Project documentation
 ```
 
