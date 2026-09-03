@@ -1,23 +1,19 @@
 # Bank Management System — Oracle PL/SQL
 
-A database-driven banking application built with **Oracle SQL and PL/SQL**. The project models customers and accounts, processes deposits, withdrawals and transfers, records transaction history, validates business rules, and maintains an audit trail for balance changes.
+A small banking database project built with **Oracle SQL and PL/SQL**. It covers customers, accounts, deposits, withdrawals, transfers, transaction history, and balance-change auditing.
 
-## Features
+## What it does
 
-- Customer and bank-account management
-- Savings/current account types and account status controls
-- Deposit and withdrawal processing
-- Inter-account fund transfers
-- Balance lookup through a PL/SQL function
-- Transaction history and reporting queries
-- Insufficient-balance and invalid-input handling with `RAISE_APPLICATION_ERROR`
-- Transaction validation and balance-audit triggers
-- PL/SQL package specification/body for organized business logic
-- Referential integrity, `CHECK` constraints and unique customer phone validation
-- Sequences for generated customer, account, transaction and audit IDs
-- Rollback on failed banking operations
-- Deterministic row locking during transfers to reduce deadlock risk
-- Repeatable setup script with cleanup and sample data
+- Stores customers and their bank accounts
+- Supports savings and current accounts
+- Handles deposits, withdrawals, and transfers
+- Checks account status and available balance before transactions
+- Prevents negative balances with database constraints
+- Records every financial transaction
+- Keeps an audit record whenever an account balance changes
+- Uses a PL/SQL package to keep the banking operations together
+- Uses row locking for transfers to reduce concurrency problems
+- Includes error handling and rollback for failed operations
 
 ## Database Design
 
@@ -33,48 +29,59 @@ CUSTOMERS
 ACCOUNTS ──────────< ACCOUNT_AUDIT
 ```
 
-### Main tables
+### Tables
 
 | Table | Purpose |
 |---|---|
-| `CUSTOMERS` | Customer master data |
-| `ACCOUNTS` | Account type, status and current balance |
-| `TRANSACTIONS` | Deposits, withdrawals and transfer entries |
-| `ACCOUNT_AUDIT` | Historical balance-change audit trail |
+| `CUSTOMERS` | Customer details |
+| `ACCOUNTS` | Account type, status and balance |
+| `TRANSACTIONS` | Deposit, withdrawal and transfer records |
+| `ACCOUNT_AUDIT` | Balance-change history |
 
-## PL/SQL Architecture
+## PL/SQL Package
 
-The main banking operations are exposed through `BANK_PKG`:
+The main operations are inside `BANK_PKG`:
 
-- `GET_BALANCE` — returns the current account balance
-- `DEPOSIT_MONEY` — validates and records deposits
-- `WITHDRAW_MONEY` — validates funds and records withdrawals
-- `TRANSFER_MONEY` — atomically moves funds between accounts
+- `GET_BALANCE` — checks an account balance
+- `DEPOSIT_MONEY` — adds money to an active account
+- `WITHDRAW_MONEY` — checks the balance and withdraws money
+- `TRANSFER_MONEY` — moves money between two active accounts
 - `CLOSE_ACCOUNT` — closes an account only when its balance is zero
 
-Supporting procedures handle amount and account-status validation internally.
+The package also contains private validation procedures for transaction amounts and account status.
 
-## Business Rules
+## Rules handled by the database
 
 1. Transaction amounts must be greater than zero.
-2. Only active accounts can perform banking operations.
-3. An account cannot have a negative balance.
-4. Withdrawals and transfers fail when funds are insufficient.
-5. Source and destination accounts must be different for transfers.
+2. Only active accounts can be used for deposits, withdrawals, and transfers.
+3. An account balance cannot go below zero.
+4. A withdrawal or transfer is rejected when there is not enough money.
+5. A transfer cannot be made from an account to itself.
 6. Both accounts must be active for a transfer.
-7. An account can only be closed when its balance is zero.
-8. Failed operations are rolled back so partial transactions are not retained.
-9. Balance changes are recorded in the audit table.
+7. An account with a non-zero balance cannot be closed.
+8. Failed banking operations are rolled back.
+9. Balance changes are written to the audit table.
 
-## Example Workflow
+## Sample data
 
-The demo section of the SQL script performs:
+The demo uses two sample customers:
 
-1. Deposit into **Ashutosh Kushwaha's** account.
-2. Withdrawal for an ATM transaction.
-3. Transfer from Ashutosh Kushwaha's account to **Palak Sharma's** account.
-4. Account, transaction-history, customer-balance and audit reports.
-5. An intentional insufficient-funds failure to demonstrate exception handling.
+- **Ashutosh Kushwaha** — account `1001`
+- **Palak Sharma** — account `1002`
+
+The script then runs a deposit, withdrawal, and transfer and prints reports for the accounts, transactions, customer balances, and audit history.
+
+## Testing
+
+`tests.sql` contains basic checks for:
+
+- Final account balances after the demo
+- Number of transaction records
+- Number of audit records
+- Rollback after an insufficient-funds withdrawal
+- `GET_BALANCE` function output
+
+Run the main script first and then run `tests.sql`.
 
 ## Technologies
 
@@ -85,38 +92,37 @@ The demo section of the SQL script performs:
 - Functions
 - Packages / Package Body
 - Triggers
+- Sequences
+- Exception Handling
 - Transactions and Rollback
-- Cursors / SQL reporting queries
-- Constraints and Referential Integrity
+- Row-level locking
+- Joins and aggregate queries
 
-## How to Run
+## How to run
 
-1. Open **Oracle SQL Developer**, SQL*Plus or SQLcl.
-2. Connect to a development Oracle schema.
+1. Open **Oracle SQL Developer**, SQL*Plus, or SQLcl.
+2. Connect to a development/test Oracle schema.
 3. Enable `DBMS_OUTPUT`.
-4. Open `bank_management_system.sql`.
-5. Run the complete script.
-6. Review the generated account, transaction and audit reports.
+4. Run `bank_management_system.sql`.
+5. Run `tests.sql`.
+6. Check the generated reports and `PASS` messages.
 
-> **Note:** The cleanup section intentionally drops objects belonging to this project so the script can be rerun in a dedicated development schema. Do not run it in a schema containing unrelated objects with the same names.
-
-## Testing Scenarios
-
-The script includes successful deposit, withdrawal and transfer flows plus an expected insufficient-funds failure. Manual tests should also cover invalid amounts, inactive accounts, self-transfers, missing accounts and closing an account with a non-zero balance.
+> **Note:** The main script removes and recreates objects with this project's names so it can be run again. Use it only in a dedicated development/test schema.
 
 ## Project Structure
 
 ```text
 plsql-bank-management-system/
-├── bank_management_system.sql
-└── README.md
+├── bank_management_system.sql   # Schema, package, demo and reports
+├── tests.sql                     # Basic automated checks
+└── README.md                     # Project documentation
 ```
 
 ## Resume Description
 
 **Bank Management System | Oracle SQL & PL/SQL**  
-Designed a relational banking database with customer, account and transaction management; implemented packaged PL/SQL business logic for deposits, withdrawals and atomic transfers with validation, exception handling, row-level locking and rollback; added triggers, audit logging, integrity constraints and reporting queries.
+Built a relational banking database with customer, account and transaction management. Developed PL/SQL procedures and a package for deposits, withdrawals and account transfers, with validation, exception handling, row locking, rollback, triggers, audit logging and reporting queries.
 
-## Disclaimer
+## Note
 
-This is an educational portfolio project intended to demonstrate Oracle SQL/PLSQL database design and programming concepts. It is not production banking software.
+This is a portfolio/learning project for demonstrating Oracle SQL and PL/SQL skills. It is not intended for real banking use.
